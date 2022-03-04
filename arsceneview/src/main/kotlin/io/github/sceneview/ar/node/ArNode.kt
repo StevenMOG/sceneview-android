@@ -10,8 +10,9 @@ import io.github.sceneview.ar.ArSceneView
 import io.github.sceneview.ar.arcore.*
 import io.github.sceneview.node.ModelNode
 import io.github.sceneview.node.Node
+import io.github.sceneview.scene.Transformable
 
-open class ArNode() : ModelNode(), ArSceneLifecycleObserver {
+open class ArNode() : ModelNode(), ArSceneLifecycleObserver, Transformable {
 
     override val sceneView: ArSceneView? get() = super.sceneView as? ArSceneView
     override val lifecycle: ArSceneLifecycle? get() = sceneView?.lifecycle
@@ -74,6 +75,8 @@ open class ArNode() : ModelNode(), ArSceneLifecycleObserver {
      * TODO : Doc
      */
     var onAnchorChanged: ((node: Node, anchor: Anchor?) -> Unit)? = null
+
+    override var editModes: Set<Transformable.EditMode> = emptySet()
 
     /**
      * TODO : Doc
