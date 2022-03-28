@@ -1,6 +1,7 @@
 package io.github.sceneview.ar.node
 
 import com.google.ar.core.*
+import com.google.ar.core.Config.PlaneFindingMode
 import com.google.ar.sceneform.math.Vector3
 import dev.romainguy.kotlin.math.*
 import io.github.sceneview.*
@@ -10,9 +11,8 @@ import io.github.sceneview.ar.ArSceneView
 import io.github.sceneview.ar.arcore.*
 import io.github.sceneview.node.ModelNode
 import io.github.sceneview.node.Node
-import io.github.sceneview.scene.Transformable
 
-open class ArNode() : ModelNode(), ArSceneLifecycleObserver, Transformable {
+open class ArNode() : ModelNode(), ArSceneLifecycleObserver {
 
     override val sceneView: ArSceneView? get() = super.sceneView as? ArSceneView
     override val lifecycle: ArSceneLifecycle? get() = sceneView?.lifecycle
@@ -76,7 +76,8 @@ open class ArNode() : ModelNode(), ArSceneLifecycleObserver, Transformable {
      */
     var onAnchorChanged: ((node: Node, anchor: Anchor?) -> Unit)? = null
 
-    override var editModes: Set<Transformable.EditMode> = emptySet()
+    open val isEditable : Boolean = true
+    open var editableTransforms : Set<EditableTransform> = EditableTransform.ALL
 
     /**
      * ### How/where does the node is positioned in the real world
@@ -88,7 +89,7 @@ open class ArNode() : ModelNode(), ArSceneLifecycleObserver, Transformable {
      * ([PlacementMode.BEST_AVAILABLE]) placement.
      * The [hitTest], [pose] and [anchor] will be influenced by this choice.
      */
-    var placementMode: PlacementMode = ArModelNode.DEFAULT_PLACEMENT_MODE
+    var placementMode: PlacementMode = DEFAULT_PLACEMENT_MODE
         set(value) {
             field = value
             doOnAttachedToScene { sceneView ->
@@ -259,4 +260,117 @@ open class ArNode() : ModelNode(), ArSceneLifecycleObserver, Transformable {
 
     /** ### Gets the world-space down direction vector (-y) of this node */
 //    val worldDown get() = localToWorldDirection(Vector3.down())
+
+    override fun clone() = copy(ArNode())
+
+    fun copy(toNode: ArNode = ArNode()) = toNode.apply {
+        super.copy(toNode)
+
+        placementMode = this@ArNode.placementMode
+    }
+
+    companion object {
+        val DEFAULT_PLACEMENT_MODE = PlacementMode.BEST_AVAILABLE
+    }
+}
+
+enum class EditableTransform {
+    POSITION, ROTATION, SCALE;
+
+    companion object {
+        val ALL = setOf(POSITION, ROTATION, SCALE)
+        val NONE = setOf<EditableTransform>()
+    }
+}
+
+enum class PlacementMode {
+    /**
+     * ### Disable every AR placement
+     * @see PlaneFindingMode.DISABLED
+     */
+    DISABLED,
+
+    /**
+     * ### Place and orientate nodes only on horizontal planes
+     * @see PlaneFindingMode.HORIZONTAL
+     */
+    PLANE_HORIZONTAL,
+
+    /**
+     * ### Place and orientate nodes only on vertical planes
+     * @see PlaneFindingMode.VERTICAL
+     */
+    PLANE_VERTICAL,
+
+    /**
+     * ### Place and orientate nodes on both horizontal and vertical planes
+     * @see PlaneFindingMode.HORIZONTAL_AND_VERTICAL
+     */
+    PLANE_HORIZONTAL_AND_VERTICAL,
+
+    /**
+     * ### Place and orientate nodes on every detected depth surfaces
+     *
+     * Not all devices support this mode. In case on non depth enabled device the placement mode
+     * will automatically fallback to [PLANE_HORIZONTAL_AND_VERTICAL].
+     * @see Config.DepthMode.AUTOMATIC
+     */
+    DEPTH,
+
+    /**
+     * ### Instantly place only nodes at a fixed orientation and an approximate distance
+     *
+     * No AR orientation will be provided = fixed +Y pointing upward, against gravity
+     *
+     * This mode is currently intended to be used with hit tests against horizontal surfaces.
+     * Hit tests may also be performed against surfaces with any orientation, however:
+     * - The resulting Instant Placement point will always have a pose with +Y pointing upward,
+     * against gravity.
+     * - No guarantees are made with respect to orientation of +X and +Z. Specifically, a hit
+     * test against a vertical surface, such as a wall, will not result in a pose that's in any
+     * way aligned to the plane of the wall, other than +Y being up, against gravity.
+     * - The [InstantPlacementPoint]'s tracking method may never become
+     * [InstantPlacementPoint.TrackingMethod.FULL_TRACKING] } or may take a long time to reach
+     * this state. The tracking method remains
+     * [InstantPlacementPoint.TrackingMethod.SCREENSPACE_WITH_APPROXIMATE_DISTANCE] until a
+     * (tiny) horizontal plane is fitted at the point of the hit test.
+     */
+    INSTANT,
+
+    /**
+     * ### Place nodes on every detected surfaces
+     *
+     * The node will be placed instantly and then adjusted to fit the best accurate, precise,
+     * available placement.
+     */
+    BEST_AVAILABLE;
+
+    val planeEnabled: Boolean
+        get() = when (planeFindingMode) {
+            PlaneFindingMode.HORIZONTAL,
+            PlaneFindingMode.VERTICAL,
+            PlaneFindingMode.HORIZONTAL_AND_VERTICAL -> true
+            else -> false
+        }
+
+    val planeFindingMode: PlaneFindingMode
+        get() = when (this) {
+            PLANE_HORIZONTAL -> PlaneFindingMode.HORIZONTAL
+            PLANE_VERTICAL -> PlaneFindingMode.VERTICAL
+            PLANE_HORIZONTAL_AND_VERTICAL,
+            BEST_AVAILABLE -> PlaneFindingMode.HORIZONTAL_AND_VERTICAL
+            else -> PlaneFindingMode.DISABLED
+        }
+
+    val depthEnabled: Boolean
+        get() = when (this) {
+            DEPTH, BEST_AVAILABLE -> true
+            else -> false
+        }
+
+    val instantPlacementEnabled: Boolean
+        get() = when (this) {
+            INSTANT, BEST_AVAILABLE -> true
+            else -> false
+        }
 }
